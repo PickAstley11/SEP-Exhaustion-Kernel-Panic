@@ -13,7 +13,7 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode
@@ -21,31 +21,33 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Show tool versions
-        run: |
-          xcodebuild -version
-          clang --version
-
-      - name: Build for iPhone
+      - name: Build
         run: |
           xcodebuild \
             -project SEPTest/SEPTest.xcodeproj \
             -scheme SEPTest \
             -configuration Release \
             -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             build
 
-      - name: List build products
+      - name: Verify output
         run: |
-          find build/Build/Products -maxdepth 2
+          ls -R build/Build/Products/Release-iphoneos
 
-      - name: Upload app
+      - name: Package .app
+        run: |
+          cd build/Build/Products/Release-iphoneos
+          ditto -c -k --sequesterRsrc --keepParent SEPTest.app SEPTest.app.zip
+
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: SEPTest-iPhone
-          path: build/Build/Products/Release-iphoneos/SEPTest.app
+          name: SEPTest-device
+          path: build/Build/Products/Release-iphoneos/SEPTest.app.zip
