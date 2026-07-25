@@ -1,10 +1,8 @@
-name: Build SEPTest
+name: Build iOS App
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
@@ -13,19 +11,58 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select latest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+
+      - name: Find project
+        id: project
+        shell: bash
+        run: |
+          PROJECT=$(find . -name "*.xcodeproj" | head -n 1)
+
+          if [ -z "$PROJECT" ]; then
+            echo "No .xcodeproj found!"
+            exit 1
+          fi
+
+          echo "Found project:"
+          echo "$PROJECT"
+
+          echo "PROJECT=$PROJECT" >> $GITHUB_ENV
+
+      - name: List schemes
+        shell: bash
+        run: |
+          xcodebuild -list -project "$PROJECT"
+
+      - name: Detect scheme
+        shell: bash
+        run: |
+          SCHEME=$(xcodebuild -list -project "$PROJECT" \
+            | awk '/Schemes:/{getline; print $1}')
+
+          if [ -z "$SCHEME" ]; then
+            echo "No scheme found!"
+            exit 1
+          fi
+
+          echo "Using scheme: $SCHEME"
+          echo "SCHEME=$SCHEME" >> $GITHUB_ENV
+
       - name: Build
         run: |
           xcodebuild \
-            -project SEPTest/SEPTest.xcodeproj \
-            -scheme SEPTest \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
@@ -37,17 +74,26 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             build
 
-      - name: Verify output
+      - name: Show build output
         run: |
-          ls -R build/Build/Products/Release-iphoneos
+          find build
 
-      - name: Package .app
+      - name: Package app
+        shell: bash
         run: |
-          cd build/Build/Products/Release-iphoneos
-          ditto -c -k --sequesterRsrc --keepParent SEPTest.app SEPTest.app.zip
+          APP=$(find build -name "*.app" | head -n 1)
 
-      - name: Upload
+          if [ -z "$APP" ]; then
+            echo "No .app found!"
+            exit 1
+          fi
+
+          echo "Packaging $APP"
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP" app.zip
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SEPTest-device
-          path: build/Build/Products/Release-iphoneos/SEPTest.app.zip
+          name: iOS-App
+          path: app.zip
